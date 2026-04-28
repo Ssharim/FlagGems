@@ -44,13 +44,22 @@ def _sort_workaround(tensor):
 
 
 @libentry()
-@triton.jit(do_not_specialize=["philox_seed", "philox_offset"])
+@triton.jit(
+    do_not_specialize=[
+        "philox_seed_lo",
+        "philox_seed_hi",
+        "philox_offset_lo",
+        "philox_offset_hi",
+    ]
+)
 def shuffle_by_random_kernel(
     value_ptr,
     random_perm_ptr,  # Output random permutation indices
     n_elements,
-    philox_seed,
-    philox_offset,
+    philox_seed_lo: tl.uint32,
+    philox_seed_hi: tl.uint32,
+    philox_offset_lo: tl.uint32,
+    philox_offset_hi: tl.uint32,
     BLOCK_SIZE: tl.constexpr,
 ):
     """
@@ -77,14 +86,12 @@ def shuffle_by_random_kernel(
     mask = value_offset < n_elements
 
     # Generate random numbers (on TPU)
-    philox_seed = philox_seed.to(tl.int64)
-    philox_offset = philox_offset.to(tl.int64)
-    c0 = (philox_offset & 0xFFFFFFFF).to(tl.uint32)
-    c1 = ((philox_offset >> 32) & 0xFFFFFFFF).to(tl.uint32)
+    c0 = philox_offset_lo
+    c1 = philox_offset_hi
     i4 = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     c0 += i4
     _O = c0 * 0
-    r0, r1, r2, r3 = tl.philox(philox_seed, c0, c1, _O, _O)
+    r0, r1, r2, r3 = tl.philox(philox_seed_lo, philox_seed_hi, c0, c1, _O, _O)
 
     # Store random numbers (on TPU)
     # Later sort these on CPU (to avoid argsort compilation issues)
@@ -139,6 +146,10 @@ def sort_by_key(key, value, valid_bits, generator=None):
         philox_seed, philox_offset = philox_backend_seed_offset(
             n_elements, generator=generator
         )
+        philox_seed_hi = (philox_seed >> 32) & 0xFFFFFFFF
+        philox_seed_lo = philox_seed & 0xFFFFFFFF
+        philox_offset_hi = (philox_offset >> 32) & 0xFFFFFFFF
+        philox_offset_lo = philox_offset & 0xFFFFFFFF
 
         # Generate random permutation (on TPU)
         random_keys = torch.empty(n_elements, dtype=torch.float32, device=key.device)
@@ -148,8 +159,10 @@ def sort_by_key(key, value, valid_bits, generator=None):
                 sorted_value,
                 random_keys,
                 n_elements,
-                philox_seed,
-                philox_offset,
+                philox_seed_lo,
+                philox_seed_hi,
+                philox_offset_lo,
+                philox_offset_hi,
                 BLOCK_SIZE,
                 num_warps=4,
             )
