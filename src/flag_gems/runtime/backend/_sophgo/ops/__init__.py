@@ -46,6 +46,7 @@ from .select_scatter import select_scatter
 from .sigmoid import sigmoid
 from .slice_scatter import slice_scatter
 from .stack import stack
+from .uniform import uniform_
 from .unique import _unique2
 from .upsample_nearest2d import upsample_nearest2d
 from .var_mean import var_mean
@@ -107,6 +108,7 @@ __all__ = [
     "select_scatter",
     "slice_scatter",
     "stack",
+    "uniform_",
     "_unique2",
     "upsample_nearest2d",
     "var_mean",
