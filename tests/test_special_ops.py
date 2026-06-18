@@ -464,10 +464,11 @@ def test_accuracy_multinomial_with_replacement(shape, dtype, n_samples):
     else:
         # Mask p% off of the categories and test the sampling results fall in the rest
         for p in (0.1, 0.5, 0.9):
-            dist = torch.rand(size=shape, dtype=dtype, device=flag_gems.device)
+            dist = torch.rand(size=shape, dtype=dtype)
             dist[torch.rand(shape) < p] = 0
             # Make sure there's at least one non-zero probability
             dist[..., -1] = 0.5
+            dist = dist.to(flag_gems.device)
             with flag_gems.use_gems():
                 res_out = torch.multinomial(dist, n_samples, True)
             res_dist = torch.gather(dist.cpu(), -1, res_out.cpu().to(torch.long))
